@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
     cout << "Accuracy: ";
     cout << fixed;
     cout << setprecision(2);
-    cout << accuracy << endl;
+    cout << accuracy << '%' << endl;
 
     pthread_exit(NULL);
 }
