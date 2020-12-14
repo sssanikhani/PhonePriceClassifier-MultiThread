@@ -12,7 +12,6 @@ void split_str_to_double(const std::string &s, std::vector<double> &v, const cha
 
 void read_double_csv_file(
     const std::string &path, 
-    std::vector<std::string> &headers, 
     std::vector<std::vector<double>> &rows
 );
 

@@ -28,7 +28,7 @@ void split_str_to_double(const string &s, vector<double> &v, const char sep)
 }
 
 
-void read_double_csv_file(const string &path, vector<string> &headers, vector<vector<double>> &rows)
+void read_double_csv_file(const string &path, vector<vector<double>> &rows)
 {
 
     rows.clear();
@@ -40,7 +40,7 @@ void read_double_csv_file(const string &path, vector<string> &headers, vector<ve
 
     string line;
     getline(file, line); // Header Line
-    split_str(line, headers, csv_separator);
+
     while(getline(file, line))
     {
 

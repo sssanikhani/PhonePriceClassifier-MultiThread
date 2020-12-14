@@ -93,10 +93,9 @@ int predict_price_class(const vector<double> &attrs, const vector<vector<double>
 
 
 int main(int argc, char *argv[])
-{
+{   
     string dataset_dir = argv[1];
     
-    vector<string> headers;
     vector<vector<double>> dataset;
     vector<vector<double>> weights;
 
@@ -105,15 +104,14 @@ int main(int argc, char *argv[])
         dataset_dir += '/';
     string dataset_path = dataset_dir + DATASET_FILE_NAME;
     string weights_path = dataset_dir + WEIGHTS_FILE_NAME;
+    read_double_csv_file(dataset_path, dataset);
+    read_double_csv_file(weights_path, weights);
 
-    read_double_csv_file(dataset_path, headers, dataset);
-    read_double_csv_file(weights_path, headers, weights);
     normilize(dataset);
 
     int data_size = dataset.size();
     int goal_column = dataset[0].size() - 1;
     vector<int> predicts;
-
 
     for (int i = 0; i < data_size; i++)
     {   
@@ -134,6 +132,7 @@ int main(int argc, char *argv[])
     cout << fixed;
     cout << setprecision(NUM_PRECISION);
     cout << accuracy << '%' << endl;
+
 
     return 0;
 
