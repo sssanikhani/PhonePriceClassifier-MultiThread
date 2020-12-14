@@ -21,7 +21,7 @@ target:
 	
 	$(CXX) $(CXX_STD_FLAG) $(CXX_OBJ_FLAG) $(MAIN)
 
-	$(CXX) $(CXX_STD_FLAG) $(CXX_EXE_FLAG) $(OBJ_FILES)
+	$(CXX) $(CXX_STD_FLAG) $(CXX_EXE_FLAG) $(EXE_FILE) $(OBJ_FILES)
 
 run:
 
