@@ -5,17 +5,18 @@ using namespace std;
 #define NUM_THREADS 4
 #define NUMBER_OF_CLASSES 4
 pthread_mutex_t mutex_extremum;
-pthread_mutex_t mutex_main_shared;
+pthread_mutex_t mutex_main_data;
 
 const string WEIGHTS_FILE_NAME = "weights.csv";
+string weights_file_path;
 
 
-struct {
+// struct {
 
-    vector<vector<double>> max_col;
-    vector<vector<double>> min_col;
+//     vector<vector<double>> max_col;
+//     vector<vector<double>> min_col;
 
-} shared_extremums;
+// } shared_extremums;
 
 
 struct {
@@ -25,6 +26,11 @@ struct {
 
 } main_shared;
 
+struct {
+    vector<vector<double>> dataset;
+    vector<vector<double>> weigths;
+} main_dataset;
+
 
 typedef struct
 {
@@ -33,7 +39,38 @@ typedef struct
 } FILE_PATH;
 
 
-void normilize(vector<vector<double>> &data)
+int pthread_read_double_csv_file(const string &path)
+{
+    
+    int num = 0;
+    const char csv_separator = ',';
+    
+    fstream file;
+    file.open(path);
+
+    string line;
+    getline(file, line); // Header Line
+
+    while(getline(file, line))
+    {
+        num++;
+        vector<double> line_words;
+        split_str_to_double(line, line_words, csv_separator);
+        pthread_mutex_lock(&mutex_main_data);
+        main_dataset.dataset.push_back(line_words);
+        pthread_mutex_unlock(&mutex_main_data);
+
+    }
+
+    file.close();
+
+    return num;
+
+}
+
+
+
+void normilize(vector<vector<double>> &data, int start, int end)
 {   
     int data_size = data.size();
     int num_cols = data[0].size() - 1;
@@ -42,11 +79,11 @@ void normilize(vector<vector<double>> &data)
     {   
 
         double extremum_diff = main_shared.main_max_col[j] - main_shared.main_min_col[j];
-        for (int i = 0; i < data_size; i++)
+        for (int i = start; i < end; i++)
         {
-
+            pthread_mutex_lock(&mutex_main_data);
             data[i][j] = (data[i][j] - main_shared.main_min_col[j]) / extremum_diff;
-
+            pthread_mutex_unlock(&mutex_main_data);
         }
 
     }
@@ -81,83 +118,72 @@ int predict_price_class(const vector<double> &attrs, const vector<vector<double>
 }
 
 
-void* find_extremums(void* args)
+void* extract_data(void* args)
 {
-    long data_size;
     FILE_PATH *file_path_struct = (FILE_PATH*) args;
     string path = file_path_struct->data_path;
 
-    vector<vector<double>> dataset;
-    vector<string> headers;
-    vector<double> min_col;
-    vector<double> max_col;
+    long size = pthread_read_double_csv_file(path);
 
-    read_double_csv_file(path, headers, dataset);
-    find_extremum_in_columns(dataset, max_col, min_col);
-
-    pthread_mutex_lock(&mutex_extremum);
-    shared_extremums.max_col.push_back(max_col);
-    shared_extremums.min_col.push_back(min_col);
-    pthread_mutex_unlock(&mutex_extremum);
-
-    data_size = dataset.size();
-    pthread_exit((void*)data_size);
+    pthread_exit((void*) size);
 }
 
 
-void* predict_data_file(void* args)
+void* predict_price_range(void* args)
 {
-    FILE_PATH* file_path_struct = (FILE_PATH*) args;
-    string data_path = file_path_struct->data_path;
-    string weights_path = file_path_struct->weights_path;
+    long tid = (long)args;
 
-    vector<vector<double>> dataset;
-    vector<vector<double>> weights;
-    vector<string> headers;
+    int data_size = main_dataset.dataset.size();
+    int goal_column = main_dataset.dataset[0].size() - 1;
 
-    read_double_csv_file(data_path, headers, dataset);
-    read_double_csv_file(weights_path, headers, weights);
-
-    int data_size = dataset.size();
-    int goal_column = dataset[0].size() - 1;
-    normilize(dataset);
+    int data_size_for_me = data_size / NUM_THREADS;
+    int start = tid * data_size_for_me;
+    int end = start + data_size_for_me;
+    normilize(main_dataset.dataset, start, end);
 
     long true_predictions = 0;
-    for (int i = 0; i < data_size; i++)
+    for (int i = start; i < end; i++)
     {
-        int predicted = predict_price_class(dataset[i], weights);
-        if (predicted == dataset[i][goal_column])
+        int predicted = predict_price_class(main_dataset.dataset[i], main_dataset.weigths);
+        if (predicted == main_dataset.dataset[i][goal_column])
             true_predictions++;
     }
-
 
     pthread_exit((void*)true_predictions);
 }
 
 
-void set_main_extremums()
+void find_extremum_in_columns()
 {
-    int col_size = shared_extremums.max_col[0].size();
-    for (int j = 0; j < col_size; j++)
-    {
-        double min_ = shared_extremums.min_col[0][j];
-        double max_ = shared_extremums.max_col[0][j];
+    int data_size = main_dataset.dataset.size();
+    int num_cols = main_dataset.dataset[0].size();
 
-        for (int i = 1; i < NUM_THREADS; i++)
+    main_shared.main_min_col.clear();
+    main_shared.main_max_col.clear();
+
+    for (int j = 0; j < num_cols; j++)
+    {
+        double max_ = main_dataset.dataset[0][j];
+        double min_ = main_dataset.dataset[0][j];
+
+        for (int i = 0; i < data_size; i++)
         {
-            if (min_ > shared_extremums.min_col[i][j])
-                min_ = shared_extremums.min_col[i][j];
-            if (max_ < shared_extremums.max_col[i][j])
-                max_ = shared_extremums.max_col[i][j];
+
+            if (max_ < main_dataset.dataset[i][j])
+                max_ = main_dataset.dataset[i][j];
+            if (min_ > main_dataset.dataset[i][j])
+                min_ = main_dataset.dataset[i][j];
+
         }
         main_shared.main_max_col.push_back(max_);
         main_shared.main_min_col.push_back(min_);
     }
+
 }
 
 
 int main(int argc, char *argv[])
-{
+{   
     string dataset_path = argv[1];
     int path_size = dataset_path.length();
     if (dataset_path[path_size - 1] != '/')
@@ -165,14 +191,16 @@ int main(int argc, char *argv[])
 
     pthread_t thread[NUM_THREADS];
     FILE_PATH path[NUM_THREADS];
+    long tid;
     int return_code;
     void* num;
     pthread_mutex_init(&mutex_extremum, NULL);
+    pthread_mutex_init(&mutex_main_data, NULL);
 
     for (int i = 0; i < NUM_THREADS; i++)
     {
         path[i].data_path = dataset_path + "train_" + to_string(i) + ".csv";
-        return_code = pthread_create(&thread[i], NULL, find_extremums, &path[i]);
+        return_code = pthread_create(&thread[i], NULL, extract_data, &path[i]);
         if (return_code)
         {
             cout << "ERROR: Couldn't create thread" << endl;
@@ -194,14 +222,14 @@ int main(int argc, char *argv[])
 
     }
 
-    set_main_extremums();
+    find_extremum_in_columns();
+    weights_file_path = dataset_path + WEIGHTS_FILE_NAME;
+    read_double_csv_file(weights_file_path, main_dataset.weigths);
 
     for (int i = 0; i < NUM_THREADS; i++)
     {
-        path[i].data_path = dataset_path + "train_" + to_string(i) + ".csv";
-        path[i].weights_path = dataset_path + WEIGHTS_FILE_NAME;
-
-        return_code = pthread_create(&thread[i], NULL, predict_data_file, &path[i]);
+        tid = i;
+        return_code = pthread_create(&thread[i], NULL, predict_price_range, (void*)tid);
         if (return_code)
         {
             cout << "ERROR: Could'nt create thread" << endl;
@@ -231,6 +259,9 @@ int main(int argc, char *argv[])
     cout << fixed;
     cout << setprecision(2);
     cout << accuracy << '%' << endl;
+
+    pthread_mutex_destroy(&mutex_extremum);
+    pthread_mutex_destroy(&mutex_main_data);
 
     pthread_exit(NULL);
 }
